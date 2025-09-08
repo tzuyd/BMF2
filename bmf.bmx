@@ -5,12 +5,13 @@ BMF - Blitzmax code formatter
 ------------------------------
 
  - Created by:	Henri Vihonen
- - Version:		0.5.1 Beta
+ - Updated by:	Hotcakes
+ - Version:		0.6.1 Beta
 
  * Description:
 
-	Standalone code formatter for Blitzmax language that can be used by a code editor/IDE.
-	BMF is a command line tool that can be used to format code files, or format code lines in real time.
+	Standalone code formatter For Blitzmax language that can be used by a code editor/IDE.
+	BMF is a command line tool that can be used To format code files, Or format code lines in real time.
 
  -Usage: See example folder
 
@@ -24,13 +25,16 @@ Import brl.linkedlist
 Import brl.threads
 Import brl.stringbuilder
 
+Import brl.systemdefault
+Import brl.ramstream
+
 'Start from command line
 If AppArgs And AppArgs.length > 1 Then
 	
 	Local c:TBMaxCode = New TBMaxCode
 	
 	Local in:Int, out:Int, s:String, v:Int
-	
+
 	For Local arg:String = EachIn AppArgs
 		
 		arg = arg.Trim()	'.ToUpper()
@@ -56,7 +60,7 @@ If AppArgs And AppArgs.length > 1 Then
 		EndIf
 		
 	Next
-	
+
 	If v Then Print "Setting keywords.."
 	c.SetKeywords()
 	
@@ -184,7 +188,7 @@ Type TBMaxCode
 	EndFunction
 	
 	Function LoadKeywords:Int(words:String, style:Int = STYLE_KEYWORDS_1)
-		
+
 		If Not words Then Notify "Error: Keywords not found.",True; Return False
 		
 		Local w:TWord
@@ -221,7 +225,7 @@ Type TBMaxCode
 			Forever
 		
 		Catch o:Object
-			
+
 			txt = str.text.ToString()
 			WriteStdout(_parse(txt))
 		EndTry
@@ -231,6 +235,8 @@ Type TBMaxCode
 		
 		Local keywords_1:String, keywords_2:String, traceWords:String
 		
+		Local Text$
+
 		keywords_1 = "Abs Abstract Alias And Asc Assert Case Catch Chr Const Continue DebugLog DebugStop Default DefData Delete EachIn " +..
 					"Else ElseIf End EndExtern EndEnum EndFunction EndIf EndMethod EndRem EndSelect EndTry EndType Enum Exit Extends Extern " +..
 					"False Field Final For Forever Framework Function Global Goto If Import Incbin IncbinLen IncbinPtr Include " +..
@@ -241,15 +247,45 @@ Type TBMaxCode
 		keywords_2 = "Byte Double Float Int Long Ptr Short String"
 		
 		traceWords = "Function Type Method Enum"
-		
-		LoadKeywords(keywords_1, STYLE_KEYWORDS_1)
+	
+		Try
+			Text=CacheAndLoadText("../../docs/html/Modules/commands.txt")
+		Catch exception:Object
+		EndTry
+		If Not Text Then
+			LoadKeywords(keywords_1, STYLE_KEYWORDS_1)
+		Else
+			loadkeywords( LoadCommandsTxt( Text ), STYLE_KEYWORDS_1 )
+		EndIf 
 		LoadKeywords(keywords_2, STYLE_KEYWORDS_2)
 		SetTraceWords(traceWords)
 		initKeywords()
 		
 	EndMethod
 	
-	Method SetOptions(options:String = "")
+	Function LoadCommandsTxt$( Text$ )
+		Local	i:Int, c:Int
+		Local	token$
+		Local sb:TStringBuilder = New TStringBuilder
+		For Local l$ = EachIn Text.Split("~n")
+			For i=0 Until l.Length
+				c=l[i]
+				If c=Asc("_") Continue
+				If c>=Asc("0") And c<=Asc("9") Continue
+				If c>=Asc("a") And c<=Asc("z") Continue
+				If c>=Asc("A") And c<=Asc("Z") Continue
+				Exit
+			Next
+			token$=l[..i]
+			If sb.Length() > 0 Then
+				sb.Append(" ")
+			End If
+			sb.Append(token)
+		Next
+		Return sb.ToString()
+	End Function
+
+Method SetOptions(options:String = "")
 		
 		options = options.Trim().toUpper()
 		
@@ -296,15 +332,15 @@ Type TBMaxCode
 				
 				Case 39 'Comment
 					
-					If isString Or isRem Then Continue			
+					If IsString Or isRem Then Continue			
 					isCom = 1
 					
 				Case 34	'String
 					
 					If isCom Or isRem Then Continue
-					isString = Not isString
+					IsString = Not IsString
 					
-					If isString And startPos > -1 Then
+					If IsString And startPos > -1 Then
 						analyze = 1
 					Else
 						startPos = -1
@@ -316,7 +352,7 @@ Type TBMaxCode
 					
 				Case 10		'Newline
 						
-					isString = 0
+					IsString = 0
 					isCom = 0
 					
 					If startPos > -1 Then
@@ -336,7 +372,7 @@ Type TBMaxCode
 					If i = eol And startPos > -1 Then analyze = 1; i:+ 1
 			
 					isNewline = 0
-					If isString Or isCom Then Continue
+					If IsString Or isCom Then Continue
 					If startPos = -1 Then startPos = i
 					
 			EndSelect
@@ -424,7 +460,7 @@ Type TBMaxCode
 			Local par:String[] = ar1[1].split(",")
 			
 			key = traceType.tolower() + "_" + ar2[0]
-			token = ":".join(ar2) + "(" + ", ".join(par) + ")"
+			token = ":".join(ar2) + "( " + ", ".join(par) + " )"
 
 		ElseIf token.contains(":")
 			token = token.Replace(" ", "").Replace("~t", "")
@@ -480,3 +516,12 @@ Type TBMFStream Extends TTextStream
 	End Function
 
 EndType
+
+Function CacheAndLoadText$(url:Object)
+	Local tmpResult$
+	Local tmpBytes:Byte[] = LoadByteArray(url)
+	url = CreateRamStream( tmpBytes, tmpBytes.Length, True, False )
+	tmpResult = LoadText(url)
+	TRamStream(url).Close()
+	Return tmpResult
+EndFunction
