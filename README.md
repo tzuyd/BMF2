@@ -11,4 +11,4 @@ strings via pipe to BMF process and the process sends the formatted code back vi
 Make a new folder named bmf inside the Blitzmax bin folder, and copy the executable bmf.exe there.
 
 ## Usage
-<To be defined>
+To use this in VSCode you need to go to VSCode Settings, search for 'formatter' and turn on 'Format on Save'.
