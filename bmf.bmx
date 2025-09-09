@@ -277,10 +277,15 @@ Type TBMaxCode
 				Exit
 			Next
 			token$=l[..i]
-			If sb.Length() > 0 Then
-				sb.Append(" ")
-			End If
-			sb.Append(token)
+			Select token
+				Case "Byte","Double","Float","Int","Long","Ptr","Short","String"
+					' NOP
+				Default
+					If sb.Length() > 0 Then
+						sb.Append(" ")
+					End If
+					sb.Append(token)
+			End Select
 		Next
 		Return sb.ToString()
 	End Function
@@ -460,7 +465,11 @@ Method SetOptions(options:String = "")
 			Local par:String[] = ar1[1].split(",")
 			
 			key = traceType.tolower() + "_" + ar2[0]
-			token = ":".join(ar2) + "( " + ", ".join(par) + " )"
+			If par.length = 1 And par[0] = ""
+				token = ":".join(ar2) + "()"
+			Else
+				token = ":".join(ar2) + "( " + ", ".join(par) + " )"
+			EndIf
 
 		ElseIf token.contains(":")
 			token = token.Replace(" ", "").Replace("~t", "")
