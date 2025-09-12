@@ -4,18 +4,18 @@ Rem
 BMF - Blitzmax code formatter
 ------------------------------
 
- - Created by:	Henri Vihonen
- - Updated by:	Hotcakes
- - Version:		0.7.2 Beta
+ - Created by:	Henri Vihonen ~2021
+ - Updated by:	Hotcakes 2025
+ - Version:		0.8.2 Beta
 
  * Description:
 
 	Standalone code formatter For Blitzmax language that can be used by a code editor/IDE.
-	BMF is a command line tool that can be used To format code files, Or format code lines in real time.
+	BMF is a command line tool that can be used to format code files, Or format code lines in real time.
 
  -Usage: See example folder
 
-EndRem
+End Rem
 
 SuperStrict
 
@@ -29,13 +29,13 @@ Import brl.systemdefault
 Import brl.ramstream
 
 'Start from command line
-If AppArgs And AppArgs.length > 1 Then
+If AppArgs And AppArgs.length>1 Then
 	
 	Local c:TBMaxCode = New TBMaxCode
 	
 	Local in:Int, out:Int, s:String, v:Int
 
-	For Local arg:String = EachIn AppArgs
+	For Local arg:String=EachIn AppArgs
 		
 		arg = arg.Trim()	'.ToUpper()
 		
@@ -320,13 +320,14 @@ Type TBMaxCode
 		Return True
 	EndMethod
 
-	Method _parse:String( txt:String Var, start:Int = 0 )
+Method _parse:String( txt:String Var, start:Int = 0 )
 			
 		If Not txt Then Return txt
 		
 		Local sb:TStringBuilder = New TStringBuilder
 		Local startPos:Int = - 1, lineCount:Int = start
 		Local IsString:Int, isCom:Int, isRem:Int, isNewline:Int, isEnd:Int
+		Local isMultiString:Int  ' New flag for multi-line strings
 		Local isParam:Int
 		Local isIdentifier:Int
 		Local token:String, name:String, char:Int, analyze:Int
@@ -335,48 +336,85 @@ Type TBMaxCode
 		
 		For Local i:Int = 0 Until txt.length
 			
+			' Check for triple quotes at current position
+			Local isTripleQuote:Int = False
+			If i <= txt.length - 3 Then
+				If txt[i] = 34 And txt[i+1] = 34 And txt[i+2] = 34 Then
+					isTripleQuote = True
+				EndIf
+			EndIf
+			
 			Select txt[i]
 				
 				Case 39 'Comment
 					
-					If IsString Or isRem Then Continue			
+					If IsString Or isRem Or isMultiString Then Continue			
 					isCom = 1
 					
-				Case 34	'String
+				Case 34	'String - handle both single and triple quotes
 					
 					If isCom Or isRem Then Continue
-					IsString = Not IsString
 					
-					If IsString And startPos > - 1 Then
-						analyze = 1
+					' Handle triple quotes
+					If isTripleQuote Then
+						If isMultiString Then
+							' End of multi-line string
+							isMultiString = False
+							' Skip the next two quote characters
+							i :+ 2
+						Else
+							' Start of multi-line string
+							isMultiString = True
+							' Skip the next two quote characters  
+							i :+ 2
+						EndIf
+						
+						If isMultiString And startPos > - 1 Then
+							analyze = 1
+						Else
+							startPos = - 1
+						EndIf
 					Else
-						startPos = - 1
+						' Handle single quotes (only if not in multi-line string)
+						If Not isMultiString Then
+							IsString = Not IsString
+							
+							If IsString And startPos > - 1 Then
+								analyze = 1
+							Else
+								startPos = - 1
+							EndIf
+						EndIf
 					EndIf
 
 				Case 9, 32	'Tab, Space 
 					
-					If startPos > - 1 And Not isIdentifier Then analyze = 1
+					If startPos > - 1 And Not isIdentifier And Not isMultiString Then analyze = 1
 					
 				Case 10		'Newline
 						
-					IsString = 0
-					isCom = 0
+					If Not isMultiString Then
+						IsString = 0
+						isCom = 0
+					EndIf
 					
-					If startPos > - 1 Then
+					If startPos > - 1 And Not isMultiString Then
 						isNewline = 1
 						analyze = 1
 					Else
-						isIdentifier = 0
-						lineCount:+1
+						If Not isMultiString Then
+							isIdentifier = 0
+							lineCount:+1
+						EndIf
 					EndIf
 			
 				Case 13, 59		' Return, Semicolon ';'
 				
-					If startPos > - 1 Then analyze = 1
+					If startPos > - 1 And Not isMultiString Then analyze = 1
 					
 				' Operator detection: = + - * / < > & | ^ ~ ! % :
 				Case 61, 43, 45, 42, 47, 60, 62, 38, 124, 94, 126, 33, 37, 58
-					If IsString Or isCom Or isRem Then Continue
+					If IsString Or isCom Or isRem Or isMultiString Then Continue
 
 					' Determine operator and length. Detect colon-based compounds even if they have spaces in between.
 					Local isCompound:Int = 0
@@ -428,29 +466,35 @@ Type TBMaxCode
 								isRem = 1
 							EndIf
 
-							name = GetWord(token)
+							' --- Only do keyword lookup when NOT inside a Rem block ---
+							If Not isRem Then
+								name = GetWord(token)
 
-							' Ensure keywords have trailing space if needed
-							If _isKeywordNeedingSpace(name) And i < txt.length Then
-								Local nextChar:Int = txt[i]
-								If nextChar <> 32 And nextChar <> 9 And nextChar <> 10 And nextChar <> 13 And nextChar <> 40 Then
-									sb.Append(" ")
+								' Ensure keywords have trailing space if needed
+								If _isKeywordNeedingSpace(name) And i < txt.length Then
+									Local nextChar:Int = txt[i]
+									If nextChar <> 32 And nextChar <> 9 And nextChar <> 10 And nextChar <> 13 And nextChar <> 40 Then
+										sb.Append(" ")
+									EndIf
 								EndIf
-							EndIf
 
-							If _isMatch Then
-								If optAutoCap And name <> token Then
-									sb.Append(name)
+								If _isMatch Then
+									If optAutoCap And name <> token Then
+										sb.Append(name)
+									Else
+										sb.Append(txt[startPos..i])
+									EndIf
+
+									isIdentifier = _isTraceable
+									If isIdentifier And isEnd Then
+										isEnd = 0
+										isIdentifier = 0
+									EndIf
 								Else
 									sb.Append(txt[startPos..i])
 								EndIf
-
-								isIdentifier = _isTraceable
-								If isIdentifier And isEnd Then
-									isEnd = 0
-									isIdentifier = 0
-								EndIf
 							Else
+								' Inside Rem block: append raw token exactly as in source
 								sb.Append(txt[startPos..i])
 							EndIf
 						Else
@@ -474,10 +518,6 @@ Type TBMaxCode
 					EndIf
 
 					' Emit operator according to rules:
-					'  - single-char operators (except ':') -> space both sides
-					'  - ':' itself -> attach (no spaces)
-					'  - two-char ops -> space both sides, except colon-prefixed two-char (':+' etc) -> no spaces (attach)
-					'  - fallback -> append raw
 					If specialColonOp Then
 						' attach colon compound with no spaces (consumes any spaces that were between)
 						sb.Append(op)
@@ -490,10 +530,10 @@ Type TBMaxCode
 							While prev >= 0 And ( sb[prev] = 32 Or sb[prev] = 9 )
 								prev:-1
 							Wend
-							Local prevChar:Int = - 1
-							If prev >= 0 Then prevChar = sb[prev]
+							Local prevChar :Int =-1
+							If prev>=0 Then prevChar = sb[prev]
 							
-							If prev < 0 Or prevChar = 40 Or prevChar = 61 Or prevChar = 43 Or prevChar = 45 Or prevChar = 42 Or prevChar = 47 Or prevChar = 60 Or prevChar = 62 Then
+							If prev<0 Or prevChar = 40 Or prevChar = 61 Or prevChar = 43 Or prevChar = 45 Or prevChar = 42 Or prevChar = 47 Or prevChar = 60 Or prevChar = 62 Then
 								' Unary: no leading space
 								sb.Append(op + " ")
 							Else
@@ -501,14 +541,18 @@ Type TBMaxCode
 								sb.Append(" " + op + " ")
 							EndIf
 						Else
+							' All other single-char operators get spaced
 							sb.Append(" " + op + " ")
 						EndIf
 					ElseIf opLen = 2 Then
+						' Two-char operators get spaced
 						sb.Append(" " + op + " ")
-					ElseIf opLen = 4 Then
-						sb.Append(op + " ")
+					ElseIf opLen=4 Then
+						' Special case like ": +" that collapsed spacing, keep a trailing space
+						sb.Append(op+" ")
 					Else
-						sb.Append(op)
+						' Fallback: safe to space both sides
+						sb.Append(" " + op + " ")
 					EndIf
 
 					' Advance index to skip the operator and any intervening chars we consumed
@@ -527,7 +571,7 @@ Type TBMaxCode
 					If i = eol And startPos > - 1 Then analyze = 1; i:+1
 			
 					isNewline = 0
-					If IsString Or isCom Then Continue
+					If IsString Or isCom Or isMultiString Then Continue
 					If startPos = - 1 Then startPos = i
 					
 			EndSelect
@@ -555,34 +599,40 @@ Type TBMaxCode
 						isRem = 1
 					EndIf
 					
-					name = GetWord(token)
+					' --- Only do keyword lookup when NOT inside a Rem block ---
+					If Not isRem Then
+						name = GetWord(token)
 
-					' Ensure keywords have trailing space if needed
-					If _isKeywordNeedingSpace(name) And i < txt.length Then
-						Local nextChar:Int = txt[i]
-						If nextChar <> 32 And nextChar <> 9 And nextChar <> 10 And nextChar <> 13 And nextChar <> 40 Then
-							sb.Append(" ")
+						' Ensure keywords have trailing space if needed
+						If _isKeywordNeedingSpace(name) And i < txt.length Then
+							Local nextChar:Int = txt[i]
+							If nextChar <> 32 And nextChar <> 9 And nextChar <> 10 And nextChar <> 13 And nextChar <> 40 Then
+								sb.Append(" ")
+							EndIf
 						EndIf
-					EndIf
 
-					If _isMatch Then
-						If optAutoCap And name <> token Then
-							' Append the corrected case version
-							sb.Append(name)
+						If _isMatch Then
+							If optAutoCap And name <> token Then
+								' Append the corrected case version
+								sb.Append(name)
+							Else
+								' Append original token
+								sb.Append(txt[startPos..i])
+							EndIf
+							
+							isIdentifier = _isTraceable
+							
+							If isIdentifier And isEnd Then
+								isEnd = 0
+								isIdentifier = 0
+							EndIf
+							
 						Else
-							' Append original token
+							' No match - append original token
 							sb.Append(txt[startPos..i])
 						EndIf
-						
-						isIdentifier = _isTraceable
-						
-						If isIdentifier And isEnd Then
-							isEnd = 0
-							isIdentifier = 0
-						EndIf
-						
 					Else
-						' No match - append original token
+						' Inside Rem block: append raw token exactly as in source
 						sb.Append(txt[startPos..i])
 					EndIf
 					
